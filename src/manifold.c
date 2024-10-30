@@ -39,6 +39,29 @@ struct RmcManifold_s {
 
 };
 
+//i have copied this without remorse from stackoverflow
+static void _invertMetric(const RmcMetricOutput* metric, RmcMetricOutput* result) {
+#define A (*metric)
+#define R (*result)
+    const RmcFloat det = +A[0][0]*(A[1][1]*A[2][2]-A[2][1]*A[1][2])
+                        -A[0][1]*(A[1][0]*A[2][2]-A[1][2]*A[2][0])
+                        +A[0][2]*(A[1][0]*A[2][1]-A[1][1]*A[2][0]);
+    const RmcFloat invdet = 1. / det;
+
+
+    R[0][0] =  (A[1][1]*A[2][2]-A[2][1]*A[1][2])*invdet;
+    R[1][0] = -(A[0][1]*A[2][2]-A[0][2]*A[2][1])*invdet;
+    R[2][0] =  (A[0][1]*A[1][2]-A[0][2]*A[1][1])*invdet;
+    R[0][1] = -(A[1][0]*A[2][2]-A[1][2]*A[2][0])*invdet;
+    R[1][1] =  (A[0][0]*A[2][2]-A[0][2]*A[2][0])*invdet;
+    R[2][1] = -(A[0][0]*A[1][2]-A[1][0]*A[0][2])*invdet;
+    R[0][2] =  (A[1][0]*A[2][1]-A[2][0]*A[1][1])*invdet;
+    R[1][2] = -(A[0][0]*A[2][1]-A[2][0]*A[0][1])*invdet;
+    R[2][2] =  (A[0][0]*A[1][1]-A[1][0]*A[0][1])*invdet;
+#undef R
+#undef A
+}
+
 static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
     const float dXi2 = manifold->fBounds / manifold->uResolution;
     RmcCoordinates adjustedCoords = {
@@ -53,6 +76,24 @@ static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, Rmc
     for(uint32_t j = 0; j < 3; ++j) {
         for(uint32_t k = 0; k < 3; ++k) {
             (*output)[j][k] = manifold->metricField[i][j][k];
+        }
+    }
+}
+
+static void _getInverseMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
+    const float dXi2 = manifold->fBounds / manifold->uResolution;
+    RmcCoordinates adjustedCoords = {
+        .x = (coords->x + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+        .y = (coords->y + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+        .z = (coords->z + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+    };  
+    uint32_t i = adjustedCoords.x;
+    i += adjustedCoords.y * manifold->uResolution;
+    i += adjustedCoords.z * manifold->uResolution * manifold->uResolution;
+
+    for(uint32_t j = 0; j < 3; ++j) {
+        for(uint32_t k = 0; k < 3; ++k) {
+            (*output)[j][k] = manifold->inverseMetricField[i][j][k];
         }
     }
 }
@@ -80,6 +121,7 @@ static RmcError _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
 
         //fill metric in spot
         func(&coords, &manifold->metricField[i]);
+        _invertMetric(&manifold->metricField[i], &manifold->inverseMetricField[i]);
     }
     return RMC_SUCCESS;
 }
@@ -121,6 +163,20 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
     }
     DEBUGPRINT("\tOK\n\n");
 
+    DEBUGPRINT("\tAllocating inverse metric field for manifold...\n");
+    ALIAS->inverseMetricField = malloc(
+        ALIAS->uSize *
+        sizeof(RmcMetricOutput)
+    );
+
+    if(!ALIAS->inverseMetricField) {
+        DEBUGPRINT("\tFailed to allocate inverse metric field\n\n");
+        free(ALIAS->metricField);
+        free(ALIAS);
+        return RMC_ERROR_GENERIC_FAILED_ALLOCATION;
+    }
+    DEBUGPRINT("\tOK\n\n");
+
     DEBUGPRINT("\tAllocating christoffel field for manifold...\n");
     ALIAS->christoffelField = malloc(
         ALIAS->uSize *
@@ -130,6 +186,7 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
     if(!ALIAS->christoffelField) {
         DEBUGPRINT("\tFailed to allocate christoffel field\n\n\t");
         free(ALIAS->metricField);
+        free(ALIAS->inverseMetricField);
         free(ALIAS);
         return RMC_ERROR_GENERIC_FAILED_ALLOCATION;
     }
@@ -152,11 +209,57 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
 void rmcManifoldDestroy(RmcManifold manifold) {
     free(manifold->christoffelField);
     free(manifold->metricField);
+    free(manifold->inverseMetricField);
     free(manifold);
     DEBUGPRINT("Destroyed a manifold\n");
 }
 
 RmcError rmcManifoldTensorLowerIndex(RmcManifold manifold, const RmcCoordinates* coords, const RmcTensor* vector, RmcTensor* result) {
+    if(!manifold) {
+        return RMC_ERROR_GENERIC_EMPTY_HANDLE;
+    }
+    if(!coords || !vector || !result) {
+        return RMC_ERROR_GENERIC_NULLPTR;
+    }
+    if(vector->type != RMC_TENSOR_TYPE_VECTOR) {
+        return RMC_ERROR_TENSOR_TYPE_WRONG;
+    }
+
+    RmcMetricOutput metric;
+    _getMetricAt(manifold, coords, &metric);
+    result->type = RMC_TENSOR_TYPE_COVECTOR;
+
+    for(uint32_t i = 0; i < 3; ++i) {
+        result->components.u[i] = 0;
+        for(uint32_t j = 0; j < 3; ++j) {
+            result->components.u[i] += metric[i][j] * vector->components.u[j];
+        }
+    }
+
+    return RMC_SUCCESS;
+}
+
+RmcError rmcManifoldTensorRaiseIndex(RmcManifold manifold, const RmcCoordinates* coords, const RmcTensor* vector, RmcTensor* result) {
+    if(!manifold) {
+        return RMC_ERROR_GENERIC_EMPTY_HANDLE;
+    }
+    if(!coords || !vector || !result) {
+        return RMC_ERROR_GENERIC_NULLPTR;
+    }
+    if(vector->type != RMC_TENSOR_TYPE_COVECTOR) {
+        return RMC_ERROR_TENSOR_TYPE_WRONG;
+    }
+
+    RmcMetricOutput metric;
+    _getInverseMetricAt(manifold, coords, &metric);
+    result->type = RMC_TENSOR_TYPE_VECTOR;
+
+    for(uint32_t i = 0; i < 3; ++i) {
+        result->components.u[i] = 0;
+        for(uint32_t j = 0; j < 3; ++j) {
+            result->components.u[i] += metric[i][j] * vector->components.u[j];
+        }
+    }
 
     return RMC_SUCCESS;
 }

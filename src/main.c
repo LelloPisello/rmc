@@ -23,9 +23,9 @@ int main(int argC, char* argV[]) {
         };
         rmcManifoldCreate(&info, &manifold);
     }
-
+    RmcTensor b;
     RmcTensor a = {
-        RMC_TENSOR_TYPE_VECTOR,
+        RMC_TENSOR_TYPE_COVECTOR,
         {
             .x = 3,
             .y = 4,
@@ -33,8 +33,16 @@ int main(int argC, char* argV[]) {
         }
     };
 
+    RmcCoordinates coords = {
+        .x = 0,
+        .y = 0,
+        .z = 0
+    };
+
+    rmcManifoldTensorRaiseIndex(manifold, &coords, &a, &b);
+
     RmcFloat result;
-    rmcManifoldTensorGetLength(manifold, &a.components, &a, &result);
+    rmcManifoldTensorGetLength(manifold, &coords, &b, &result);
     printf("Length of vector is %f\n", result);
 
     rmcManifoldDestroy(manifold);
