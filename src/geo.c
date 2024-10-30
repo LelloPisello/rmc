@@ -3,7 +3,7 @@
 
 RmcError rmcTensorSum(const RmcTensor *a, const RmcTensor *b, RmcTensor *result) {
     if(!a || !b || !result) {
-        return RMC_ERROR_GENERIC_NULLPTR_ERROR;
+        return RMC_ERROR_GENERIC_NULLPTR;
     }
 
     if(a->type != b->type) {
@@ -24,7 +24,7 @@ RmcError rmcTensorSum(const RmcTensor *a, const RmcTensor *b, RmcTensor *result)
 
 RmcError rmcTensorMul(RmcFloat r, const RmcTensor *t, RmcTensor *result) {
     if(!t || !result) {
-        return RMC_ERROR_GENERIC_NULLPTR_ERROR;
+        return RMC_ERROR_GENERIC_NULLPTR;
     }
 
     *result = (RmcTensor) {

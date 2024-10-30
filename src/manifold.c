@@ -2,6 +2,7 @@
 #include "geo.h"
 #include "rmc.h"
 #include <stdlib.h>
+#include <math.h>
 
 
 /*
@@ -38,22 +39,54 @@ struct RmcManifold_s {
 
 };
 
+static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
+    const float dXi2 = manifold->fBounds / manifold->uResolution;
+    RmcCoordinates adjustedCoords = {
+        .x = (coords->x + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+        .y = (coords->y + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+        .z = (coords->z + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
+    };  
+    uint32_t i = adjustedCoords.x;
+    i += adjustedCoords.y * manifold->uResolution;
+    i += adjustedCoords.z * manifold->uResolution * manifold->uResolution;
+
+    for(uint32_t j = 0; j < 3; ++j) {
+        for(uint32_t k = 0; k < 3; ++k) {
+            (*output)[j][k] = manifold->metricField[i][j][k];
+        }
+    }
+}
+
 //calculate values for metric in buffer
 static RmcError _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
-    //half of width of cube 
-    const RmcFloat dXi = (manifold->fBounds) / manifold->uResolution;
+    //width of cube 
+    const RmcFloat dXi = (manifold->fBounds * 2) / manifold->uResolution;
 
     for(uint32_t i = 0; i < manifold->uSize; ++i) {
-        RmcFloat x = (i % manifold->uResolution) + dXi;
-        RmcFloat y = (i % (manifold->uResolution * manifold->uResolution)) / manifold->uResolution;
-    }    
-    
+        RmcCoordinates coords = {
+            .x = (i % manifold->uResolution),
+            .y = (i % (manifold->uResolution * manifold->uResolution)) / manifold->uResolution,
+            .z = (i / (manifold->uResolution * manifold->uResolution))
+        };
+        //get coords
+        coords.x *= dXi;
+        coords.y *= dXi;
+        coords.z *= dXi;
+        //center coords
+        const RmcFloat offset = dXi * 0.5 * (manifold->uResolution + 1);
+        coords.x -= offset;
+        coords.y -= offset;
+        coords.z -= offset;
+
+        //fill metric in spot
+        func(&coords, &manifold->metricField[i]);
+    }
     return RMC_SUCCESS;
 }
 
 RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifold* result){
     if(!manifoldInfo || !manifoldInfo->fpMetricGenerator) {
-        return RMC_ERROR_GENERIC_NULLPTR_ERROR;
+        return RMC_ERROR_GENERIC_NULLPTR;
     }
 
     if(!manifoldInfo->uResolution) {
@@ -75,7 +108,7 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
 
     //create buffers
 
-    DEBUGPRINT("\tAllocating metric field for manifold...\n", (unsigned)(ALIAS->uSize));
+    DEBUGPRINT("\tAllocating metric field for manifold...\n");
     ALIAS->metricField = malloc(
         ALIAS->uSize *
         sizeof(RmcMetricOutput)
@@ -129,6 +162,24 @@ RmcError rmcManifoldTensorLowerIndex(RmcManifold manifold, const RmcCoordinates*
 }
 
 RmcError rmcManifoldTensorGetLength(RmcManifold manifold, const RmcCoordinates* coords, const RmcTensor* vector, RmcFloat* result) {
+    if(!manifold) {
+        return RMC_ERROR_GENERIC_EMPTY_HANDLE;
+    }
+    if(!coords || !vector || !result) {
+        return RMC_ERROR_GENERIC_NULLPTR;
+    }
+    if(vector->type == RMC_TENSOR_TYPE_COVECTOR) {
+        return RMC_ERROR_TENSOR_TYPE_WRONG;
+    }
 
+    RmcMetricOutput metric;
+    _getMetricAt(manifold, coords, &metric);
+    RmcFloat length = 0;
+    for(uint32_t i = 0; i < 3; ++i) {
+        for(uint32_t j = 0; j < 3; ++j) {
+            length += metric[i][j] * vector->components.u[i] * vector->components.u[j];
+        }
+    }
+    *result = sqrt(length);
     return RMC_SUCCESS;
 }

@@ -1,15 +1,17 @@
 #include <stdio.h>
+#include "geo.h"
 #include "manifold.h"
 #include "rmc.h"
 
-int main(int argC, char* argV[]) {
-    RmcTensor a = {RMC_TENSOR_TYPE_VECTOR, 
-    1, 2, 3};
-    RmcTensor b = {RMC_TENSOR_TYPE_VECTOR,
-    0, 1, 5};
+void metrFill(const RmcCoordinates* coords, RmcMetricOutput* output) {
+    for(uint32_t i = 0; i < 3; ++i) {
+        for(uint32_t j = 0; j < 3; ++j) {
+            (*output)[i][j] = (RmcFloat)(i == j);
+        }
+    }
+}
 
-    rmcTensorSum(&a, &b, &b);
-    rmcTensorMul(0.5, &b, &b);
+int main(int argC, char* argV[]) {
 
     RmcManifold manifold;
 
@@ -17,12 +19,23 @@ int main(int argC, char* argV[]) {
         RmcManifoldCreateInfo info = {
             .fBounds = 1.0,
             .uResolution = 32,
-            .fpMetricGenerator = (RmcMetricGenerator)1,
+            .fpMetricGenerator = metrFill,
         };
         rmcManifoldCreate(&info, &manifold);
     }
 
-    printf("%f %f\n", b.components.x, b.components.y);
+    RmcTensor a = {
+        RMC_TENSOR_TYPE_VECTOR,
+        {
+            .x = 3,
+            .y = 4,
+            .z = 0
+        }
+    };
+
+    RmcFloat result;
+    rmcManifoldTensorGetLength(manifold, &a.components, &a, &result);
+    printf("Length of vector is %f\n", result);
 
     rmcManifoldDestroy(manifold);
 

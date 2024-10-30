@@ -1,4 +1,4 @@
-CFLAGS = -Wall -O2 -D DEBUG
+CFLAGS = -Wall -O2 -D DEBUG -lm
 
 bin/rmc: src/main.c bin/geo.o bin/manifold.o
 	@printf "\nCompiling executable source...\n\t"
