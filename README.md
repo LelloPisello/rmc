@@ -11,5 +11,5 @@ This is so far the only conscious design flaw i have made.
 The manifold (which acts as the 'scene') is modelled via a metric tensor (and an inverse metric) which is saved onto a buffer and linearly interpolated.
 Christoffel symbols are computed and again saved onto their own buffer. 
 Rays are marched using the geodesic equation:
-$$ \ddot{x}^i=-\Gamma^i_{jk}\dot{x}^j\dot{x}^k $$
+$ \ddot{x}^i=-\Gamma^i_{jk}\dot{x}^j\dot{x}^k $
 The thorough implementation of covectors/vectors is due to the possibility of the implementation of vector and covector fields later down the line.
