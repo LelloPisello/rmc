@@ -21,3 +21,5 @@ This isn't completetely ideal as the Christoffel symbols are functions of $x$. T
 
 The thorough implementation of covectors/vectors is due to the possibility of the implementation of vector and covector fields later down the line.
 
+### Building
+a makefile is included, but it does not check for c compilers and defaults to clang.
