@@ -70,7 +70,6 @@ static void _invertMetric(const RmcMetricOutput* metric, RmcMetricOutput* result
 
 static void _getMetricAt(RmcManifold manifold, RmcMetricOutput* metricField, const RmcCoordinates* coords, RmcMetricOutput* output) {
     const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
-    DEBUGPRINT("Getting metric\n");
 
     for(uint32_t i = 0; i < 3; ++i) {
         for(uint32_t j = 0; j < 3; ++j) {
@@ -119,7 +118,6 @@ static void _getMetricAt(RmcManifold manifold, RmcMetricOutput* metricField, con
         }
     }
 
-    DEBUGPRINT("Metric interpolated and retrieved\n");
 #undef METRICINDEX
 }
 
@@ -167,23 +165,61 @@ static void _fillChristoffel(RmcManifold manifold) {
         ) {
             //I love nested fors i love nested fors i love nested fors
             //the compiler will most definitely optimize this out 
-            for(uint32_t j = 0; j < 3; ++j) {
-                for(uint32_t k = 0; k < 3; ++k) {
-                    for(uint32_t l = 0; l < 3; ++l) {
-                        manifold->christoffelField[i][j][k][l] = 0.0;
+            for(uint32_t j = 0; j < 27; ++j) {
+                manifold->christoffelField[i][j % 3][j / 3 % 3][j / 9] = 0.0;
+            }
+        } else {
+            RmcCoordinates baseCoords;
+            
+            //half of width of brick
+            const RmcFloat dOffset = manifold->fBounds / manifold->uMetricResolution;
+
+            {
+                const RmcFloat r = (manifold->fBounds + manifold->fBounds / manifold->uMetricResolution);
+                baseCoords = (RmcCoordinates){
+                    .x = r * (2.0 * ix / manifold->uMetricResolution - 1),
+                    .y = r * (2.0 * iy / manifold->uMetricResolution - 1),
+                    .z = r * (2.0 * iz / manifold->uMetricResolution - 1)
+                };
+            }
+
+            //metric tensor derivatives
+            RmcMetricOutput metricDerivatives[3];
+            {
+                RmcMetricOutput temp;
+                for(uint32_t j = 0; j < 3; ++j) {
+                    baseCoords.u[j] += dOffset;
+                    _getMetricAt(manifold, manifold->metricField, &baseCoords, &temp);
+                    for(uint32_t k = 0; k < 9; ++k) {
+                        metricDerivatives[j][k % 3][k / 3] += temp[k % 3][k / 3];
+                    }
+
+                    baseCoords.u[j] -= 2 * dOffset;
+                    _getMetricAt(manifold, manifold->metricField, &baseCoords, &temp);
+                    baseCoords.u[j] += dOffset;
+                    for(uint32_t k = 0; k < 9; ++k) {
+                        metricDerivatives[j][k % 3][k / 3] -= temp[k % 3][k / 3];
+                        metricDerivatives[j][k % 3][k / 3] *= 1.0 / (dOffset * 2);
                     }
                 }
             }
-        } else {
+
+            RmcMetricOutput inverseMetric;
+            _getMetricAt(manifold, manifold->inverseMetricField, &baseCoords, &inverseMetric);
+            
             //i couldnt resist i hate tensor calculus
-            for(uint32_t j = 0; j < 3; ++j) {
-                for(uint32_t k = 0; k < 3; ++k) {
-                    for(uint32_t l = 0; l < 3; ++l) {
-                        manifold->christoffelField[i][j][k][l] = 0.0;
-                        for(uint32_t m = 0; m < 3; ++m) {
-                            //manifold->christoffelField[i][j][k][l] = 
-                        }
-                    }
+            for(uint32_t j = 0; j < 27; ++j) {
+                manifold->christoffelField[i][j % 3][j / 3 % 3][j / 9] = 0.0;
+                for(uint32_t m = 0; m < 3; ++m) {
+                    
+                    manifold->christoffelField[i][j % 3][j / 3 % 3][j / 9] +=
+                    0.5 * inverseMetric[j % 3][m] * (
+                        metricDerivatives[j / 3 % 3][m][j / 9] +
+                        metricDerivatives[j / 9][m][j / 3 % 3] -
+                        metricDerivatives[m][j / 3 % 3][j / 9]
+                    );
+
+                    //manifold->christoffelField[i][j][k][l] = 
                 }
             }
         }
@@ -274,6 +310,8 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
     DEBUGPRINT("Filling metric using the generator...\n\t");
     _fillMetric(ALIAS, manifoldInfo->fpMetricGenerator);
 
+    DEBUGPRINT("OK\n\n\tFilling christoffel field using the metric\n\t");
+    _fillChristoffel(ALIAS);
     DEBUGPRINT("OK\n\nSuccessfully created manifold\n\n");
 
 #undef ALIAS
