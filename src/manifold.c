@@ -68,6 +68,53 @@ static void _invertMetric(const RmcMetricOutput* metric, RmcMetricOutput* result
 #undef A
 }
 
+static void _getChristoffelAt(RmcManifold manifold, const RmcCoordinates* coords, RmcChristoffelSymbol* result) {
+    for(uint32_t i = 0; i < 27; ++i) {
+        (*result)[i % 3][i / 3 % 3][i / 9] = 0.0;
+    }
+    
+    const RmcFloat r = (manifold->uMetricResolution / 2.0);
+    const RmcCoordinates fIndex = {
+        .x = r * (coords->x / manifold->fBounds / (1 + 1.0 / manifold->uMetricResolution) + 1),
+        .y = r * (coords->y / manifold->fBounds / (1 + 1.0 / manifold->uMetricResolution) + 1),    
+        .z = r * (coords->z / manifold->fBounds / (1 + 1.0 / manifold->uMetricResolution) + 1)
+    };
+    RmcCoordinates delta = {
+        .x = fIndex.x - (uint32_t)fIndex.x,
+        .y = fIndex.y - (uint32_t)fIndex.y,
+        .z = fIndex.z - (uint32_t)fIndex.z
+    };
+
+    const uint64_t 
+        ix = fIndex.x,
+        iy = fIndex.y,
+        iz = fIndex.z;
+
+#define CHRISTOFFELINDEX(x, y, z)(x + y * manifold->uChristoffelResolution + z * manifold->uChristoffelResolution * manifold->uChristoffelResolution)
+
+    for(uint32_t d = 0; d < 8; ++d) {
+        const uint32_t 
+            onx = d & 1 ? 1 : 0,
+            ony = d & 2 ? 1 : 0,
+            onz = d & 4 ? 1 : 0;
+        for(uint32_t i = 0; i < 27; ++i) {
+            (*result)[i % 3][i / 3 % 3][i / 9] += 
+                (onx ? delta.x : 1 - delta.x) *
+                (ony ? delta.y : 1 - delta.y) *
+                (onz ? delta.z : 1 - delta.z) *
+                manifold->christoffelField[CHRISTOFFELINDEX(
+                    ix + onx, 
+                    iy + ony, 
+                    iz + onz
+                )][i % 3][i / 3 % 3][i / 9];
+
+        }
+        
+    }
+
+#undef CHRISTOFFELINDEX
+}
+
 static void _getMetricAt(RmcManifold manifold, RmcMetricOutput* metricField, const RmcCoordinates* coords, RmcMetricOutput* output) {
     const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
 
@@ -77,18 +124,18 @@ static void _getMetricAt(RmcManifold manifold, RmcMetricOutput* metricField, con
         }
     }    
 
-    RmcCoordinates fIndex = { 
+    const RmcCoordinates fIndex = { 
         .x = r * (coords->x + manifold->fBounds),
         .y = r * (coords->y + manifold->fBounds),
         .z = r * (coords->z + manifold->fBounds)
     };
-    RmcCoordinates delta = {
+    const RmcCoordinates delta = {
         .x = fIndex.x - (uint32_t)fIndex.x,
         .y = fIndex.y - (uint32_t)fIndex.y,
         .z = fIndex.z - (uint32_t)fIndex.z
     };
 
-    uint64_t 
+    const uint64_t 
         ix = fIndex.x,
         iy = fIndex.y,
         iz = fIndex.z;
