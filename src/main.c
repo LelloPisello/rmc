@@ -19,7 +19,7 @@ int main(int argC, char* argV[]) {
     {
         RmcManifoldCreateInfo info = {
             .fBounds = 1.0,
-            .uMetricResolution = 2,
+            .uMetricResolution = 32,
             .fpMetricGenerator = metrFill,
         };
         rmcManifoldCreate(&info, &manifold);

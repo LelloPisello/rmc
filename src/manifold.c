@@ -174,6 +174,8 @@ static void _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
     //width of cube 
     const RmcFloat r = 2 * (manifold->uMetricResolution - 1) * manifold->fBounds;
 
+    //too speedy to implement workgroups myself (just for manifold creation)
+    #pragma omp parallel for
     for(uint64_t i = 0; i < manifold->uMetricSize; ++i) {
         RmcCoordinates coords = {
             .x = (i % manifold->uMetricResolution),
@@ -197,8 +199,9 @@ static void _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
 
 //for levi-civita
 static void _fillChristoffel(RmcManifold manifold) {
-    const RmcFloat r = manifold->fBounds * (1.0 + 1.0 / manifold->uMetricResolution);
 
+    //same as earlier, can't be bothered
+    #pragma omp parallel for
     for(uint64_t i = 0; i < manifold->uChristoffelSize; ++i) {
         const uint64_t 
             ix = i % manifold->uChristoffelResolution,
