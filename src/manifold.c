@@ -68,53 +68,61 @@ static void _invertMetric(const RmcMetricOutput* metric, RmcMetricOutput* result
 #undef A
 }
 
-static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
+static void _getMetricAt(RmcManifold manifold, RmcMetricOutput* metricField, const RmcCoordinates* coords, RmcMetricOutput* output) {
     const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
     DEBUGPRINT("Getting metric\n");
-    uint64_t 
-        ix = round(r * (coords->x + manifold->fBounds)),
-        iy = round(r * (coords->y + manifold->fBounds)),
-        iz = round(r * (coords->z + manifold->fBounds));
-    
-    uint64_t i = 
-        +ix
-        +iy * manifold->uMetricResolution
-        +iz * manifold->uMetricResolution * manifold->uMetricResolution
-    ;
 
-    DEBUGPRINT("\tGetting metric at { %lu, %lu, %lu }, index %lu out of %lu\n",
-    ix, iy, iz,
-    (long unsigned)i, (long unsigned)manifold->uMetricSize - 1);
-    for(uint64_t j = 0; j < 3; ++j) {
-        for(uint64_t k = 0; k < 3; ++k) {
-            (*output)[j][k] = manifold->metricField[i][j][k];
+    for(uint32_t i = 0; i < 3; ++i) {
+        for(uint32_t j = 0; j < 3; ++j) {
+            (*output)[i][j] = 0.0;
+        }
+    }    
+
+    RmcCoordinates fIndex = { 
+        .x = r * (coords->x + manifold->fBounds),
+        .y = r * (coords->y + manifold->fBounds),
+        .z = r * (coords->z + manifold->fBounds)
+    };
+    RmcCoordinates delta = {
+        .x = fIndex.x - (uint32_t)fIndex.x,
+        .y = fIndex.y - (uint32_t)fIndex.y,
+        .z = fIndex.z - (uint32_t)fIndex.z
+    };
+
+    uint64_t 
+        ix = fIndex.x,
+        iy = fIndex.y,
+        iz = fIndex.z;
+
+#define METRICINDEX(x, y, z) (x + y * manifold->uMetricResolution + z * manifold->uMetricResolution * manifold->uMetricResolution)
+
+    //kill me I am not writing everything down or using binary digits
+    for(uint32_t d = 0; d < 8; ++d) {
+        //d & 1, d & 2, d & 4
+        //x      y      z
+        const uint32_t 
+            onx = d & 1 ? 1 : 0,
+            ony = d & 2 ? 1 : 0,
+            onz = d & 4 ? 1 : 0;
+        for(uint32_t i = 0; i < 3; ++i) {
+            for(uint32_t j = 0; j < 3; ++j) {
+                (*output)[i][j] += 
+                (onx ? delta.x : 1 - delta.x) *
+                (ony ? delta.y : 1 - delta.y) *
+                (onz ? delta.z : 1 - delta.z) *
+                metricField
+                [METRICINDEX(
+                    ix + onx, 
+                    iy + ony, 
+                    iz + onz)][i][j];
+            }
         }
     }
+
+    DEBUGPRINT("Metric interpolated and retrieved\n");
+#undef METRICINDEX
 }
 
-static void _getInverseMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
-    const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
-    DEBUGPRINT("Getting inverse metric\n");
-    uint64_t 
-        ix = round(r * (coords->x + manifold->fBounds)),
-        iy = round(r * (coords->y + manifold->fBounds)),
-        iz = round(r * (coords->z + manifold->fBounds));
-
-    uint64_t i = 
-        +ix
-        +iy * manifold->uMetricResolution
-        +iz * manifold->uMetricResolution * manifold->uMetricResolution
-    ;
-
-    DEBUGPRINT("\tGetting inverse metric at { %lu, %lu, %lu }, index %lu out of %lu\n",
-    ix, iy, iz,
-    (long unsigned)i, (long unsigned)manifold->uMetricSize - 1);
-    for(uint64_t j = 0; j < 3; ++j) {
-        for(uint64_t k = 0; k < 3; ++k) {
-            (*output)[j][k] = manifold->inverseMetricField[i][j][k];
-        }
-    }
-}
 
 //calculate values for metric in buffer
 static void _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
@@ -167,7 +175,17 @@ static void _fillChristoffel(RmcManifold manifold) {
                 }
             }
         } else {
-            
+            //i couldnt resist i hate tensor calculus
+            for(uint32_t j = 0; j < 3; ++j) {
+                for(uint32_t k = 0; k < 3; ++k) {
+                    for(uint32_t l = 0; l < 3; ++l) {
+                        manifold->christoffelField[i][j][k][l] = 0.0;
+                        for(uint32_t m = 0; m < 3; ++m) {
+                            //manifold->christoffelField[i][j][k][l] = 
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -283,7 +301,7 @@ RmcError rmcManifoldTensorLowerIndex(RmcManifold manifold, const RmcCoordinates*
     }
 
     RmcMetricOutput metric;
-    _getMetricAt(manifold, coords, &metric);
+    _getMetricAt(manifold, manifold->metricField, coords, &metric);
     result->type = RMC_TENSOR_TYPE_COVECTOR;
 
     for(uint64_t i = 0; i < 3; ++i) {
@@ -308,7 +326,7 @@ RmcError rmcManifoldTensorRaiseIndex(RmcManifold manifold, const RmcCoordinates*
     }
 
     RmcMetricOutput metric;
-    _getInverseMetricAt(manifold, coords, &metric);
+    _getMetricAt(manifold, manifold->inverseMetricField, coords, &metric);
     result->type = RMC_TENSOR_TYPE_VECTOR;
 
     for(uint64_t i = 0; i < 3; ++i) {
@@ -333,7 +351,7 @@ RmcError rmcManifoldTensorGetLength(RmcManifold manifold, const RmcCoordinates* 
     }
 
     RmcMetricOutput metric;
-    _getMetricAt(manifold, coords, &metric);
+    _getMetricAt(manifold, manifold->metricField, coords, &metric);
     RmcFloat length = 0;
     for(uint64_t i = 0; i < 3; ++i) {
         for(uint64_t j = 0; j < 3; ++j) {

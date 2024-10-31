@@ -3,6 +3,7 @@
 #include "manifold.h"
 #include "rmc.h"
 
+//kroenecker delta
 void metrFill(const RmcCoordinates* coords, RmcMetricOutput* output) {
     for(uint64_t i = 0; i < 3; ++i) {
         for(uint64_t j = 0; j < 3; ++j) {
@@ -34,9 +35,9 @@ int main(int argC, char* argV[]) {
     };
 
     RmcCoordinates coords = {
-        .x = -.2,
-        .y = -.2,
-        .z = -.2
+        .x = 0,
+        .y = 0,
+        .z = 0
     };
 
     printf("Raising index of tensor\n");
