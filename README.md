@@ -6,8 +6,7 @@ rays are then checked for intersections against volumes.
 ### What's wrong with it?
 I chose to make it a fixed step raymarcher because conciling SDFs with curved space seemed like a quick path to hell.
 This is so far the only conscious design flaw i have made.
-WARNING: this is horrible code that is being written at speed with no care for
-legibility and safety. This is mostly because this is supposed to be a test, and not an actual project.
+This is basically a speed coding project, so the code is riddled with issues both in its architecture and its legibility.
 
 ### More details
 The manifold (which acts as the 'scene') is modelled via a metric tensor (and an inverse metric) which is saved onto a buffer and linearly interpolated.
@@ -17,3 +16,4 @@ Rays are marched using the geodesic equation:
 $\ddot{x}^i=-\Gamma^i_{jk}\dot{x}^j\dot{x}^k$
 
 The thorough implementation of covectors/vectors is due to the possibility of the implementation of vector and covector fields later down the line.
+
