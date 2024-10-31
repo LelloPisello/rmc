@@ -1,6 +1,5 @@
 
 ![alt text](/logo.png?raw=true)
-# RMC
 ## What is it?
 It is a fixed step raymarcher that marches the rays through a curved and bounded manifold.
 rays are then checked for intersections against volumes.
