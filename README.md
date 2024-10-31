@@ -15,5 +15,8 @@ Rays are marched using the geodesic equation:
 
 $\ddot{x}^i=-\Gamma^i_{jk}\dot{x}^j\dot{x}^k$
 
+To make the numerical solution at least partially stable we solve for $\ddot{x}$ using RK4, while we simply use Euler's iteration for stepping the ray.
+This isn't completetely ideal as the Christoffel symbols are functions of $x$. This will not be too much of a problem if we use a fairly "smooth" metric and small step sizes.
+
 The thorough implementation of covectors/vectors is due to the possibility of the implementation of vector and covector fields later down the line.
 
