@@ -72,9 +72,9 @@ static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, Rmc
     const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
     DEBUGPRINT("Getting metric\n");
     uint64_t 
-        ix = r * (coords->x + manifold->fBounds),
-        iy = r * (coords->y + manifold->fBounds),
-        iz = r * (coords->z + manifold->fBounds);
+        ix = round(r * (coords->x + manifold->fBounds)),
+        iy = round(r * (coords->y + manifold->fBounds)),
+        iz = round(r * (coords->z + manifold->fBounds));
     
     uint64_t i = 
         +ix
@@ -96,9 +96,9 @@ static void _getInverseMetricAt(RmcManifold manifold, const RmcCoordinates* coor
     const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
     DEBUGPRINT("Getting inverse metric\n");
     uint64_t 
-        ix = r * (coords->x + manifold->fBounds),
-        iy = r * (coords->y + manifold->fBounds),
-        iz = r * (coords->z + manifold->fBounds);
+        ix = round(r * (coords->x + manifold->fBounds)),
+        iy = round(r * (coords->y + manifold->fBounds)),
+        iz = round(r * (coords->z + manifold->fBounds));
 
     uint64_t i = 
         +ix
@@ -158,6 +158,7 @@ static void _fillChristoffel(RmcManifold manifold) {
             iz == manifold->uMetricResolution
         ) {
             //I love nested fors i love nested fors i love nested fors
+            //the compiler will most definitely optimize this out 
             for(uint32_t j = 0; j < 3; ++j) {
                 for(uint32_t k = 0; k < 3; ++k) {
                     for(uint32_t l = 0; l < 3; ++l) {
@@ -166,7 +167,7 @@ static void _fillChristoffel(RmcManifold manifold) {
                 }
             }
         } else {
-
+            
         }
     }
 }

@@ -18,7 +18,7 @@ int main(int argC, char* argV[]) {
     {
         RmcManifoldCreateInfo info = {
             .fBounds = 1.0,
-            .uMetricResolution = 32,
+            .uMetricResolution = 2,
             .fpMetricGenerator = metrFill,
         };
         rmcManifoldCreate(&info, &manifold);
@@ -34,9 +34,9 @@ int main(int argC, char* argV[]) {
     };
 
     RmcCoordinates coords = {
-        .x = 1,
-        .y = 1,
-        .z = 1
+        .x = -.2,
+        .y = -.2,
+        .z = -.2
     };
 
     printf("Raising index of tensor\n");
