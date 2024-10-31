@@ -25,7 +25,7 @@ typedef struct {
     every field on the manifold (metric, christoffel symbols)
     is saved onto a 3D {uRes, uRes, uRes} buffer
     */
-    uint32_t uResolution;
+    uint64_t uMetricResolution;
 
     //pointer to the chosen generating function for the metric
     RmcMetricGenerator fpMetricGenerator;

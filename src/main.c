@@ -4,8 +4,8 @@
 #include "rmc.h"
 
 void metrFill(const RmcCoordinates* coords, RmcMetricOutput* output) {
-    for(uint32_t i = 0; i < 3; ++i) {
-        for(uint32_t j = 0; j < 3; ++j) {
+    for(uint64_t i = 0; i < 3; ++i) {
+        for(uint64_t j = 0; j < 3; ++j) {
             (*output)[i][j] = (RmcFloat)(i == j);
         }
     }
@@ -18,7 +18,7 @@ int main(int argC, char* argV[]) {
     {
         RmcManifoldCreateInfo info = {
             .fBounds = 1.0,
-            .uResolution = 32,
+            .uMetricResolution = 32,
             .fpMetricGenerator = metrFill,
         };
         rmcManifoldCreate(&info, &manifold);
@@ -34,13 +34,15 @@ int main(int argC, char* argV[]) {
     };
 
     RmcCoordinates coords = {
-        .x = 0,
-        .y = 0,
-        .z = 0
+        .x = 1,
+        .y = 1,
+        .z = 1
     };
 
+    printf("Raising index of tensor\n");
     rmcManifoldTensorRaiseIndex(manifold, &coords, &a, &b);
 
+    printf("Getting tensor length\n");
     RmcFloat result;
     rmcManifoldTensorGetLength(manifold, &coords, &b, &result);
     printf("Length of vector is %f\n", result);

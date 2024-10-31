@@ -26,8 +26,14 @@ typedef RmcFloat RmcChristoffelSymbol[3][3][3];
 
 struct RmcManifold_s {
     RmcFloat fBounds;
-    uint32_t uResolution;
-    uint32_t uSize;//entries in buffers
+    uint64_t uMetricResolution;
+    uint64_t uMetricSize;//entries in buffers
+
+    //metricresolution + 1
+    uint64_t uChristoffelResolution;
+    //size of christoffel buffer (+1 for each dimension)
+    uint64_t uChristoffelSize;
+
 
     //for lowering
     RmcMetricOutput *metricField;
@@ -63,67 +69,106 @@ static void _invertMetric(const RmcMetricOutput* metric, RmcMetricOutput* result
 }
 
 static void _getMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
-    const float dXi2 = manifold->fBounds / manifold->uResolution;
-    RmcCoordinates adjustedCoords = {
-        .x = (coords->x + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-        .y = (coords->y + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-        .z = (coords->z + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-    };  
-    uint32_t i = adjustedCoords.x;
-    i += adjustedCoords.y * manifold->uResolution;
-    i += adjustedCoords.z * manifold->uResolution * manifold->uResolution;
+    const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
+    DEBUGPRINT("Getting metric\n");
+    uint64_t 
+        ix = r * (coords->x + manifold->fBounds),
+        iy = r * (coords->y + manifold->fBounds),
+        iz = r * (coords->z + manifold->fBounds);
+    
+    uint64_t i = 
+        +ix
+        +iy * manifold->uMetricResolution
+        +iz * manifold->uMetricResolution * manifold->uMetricResolution
+    ;
 
-    for(uint32_t j = 0; j < 3; ++j) {
-        for(uint32_t k = 0; k < 3; ++k) {
+    DEBUGPRINT("\tGetting metric at { %lu, %lu, %lu }, index %lu out of %lu\n",
+    ix, iy, iz,
+    (long unsigned)i, (long unsigned)manifold->uMetricSize - 1);
+    for(uint64_t j = 0; j < 3; ++j) {
+        for(uint64_t k = 0; k < 3; ++k) {
             (*output)[j][k] = manifold->metricField[i][j][k];
         }
     }
 }
 
 static void _getInverseMetricAt(RmcManifold manifold, const RmcCoordinates* coords, RmcMetricOutput* output) {
-    const float dXi2 = manifold->fBounds / manifold->uResolution;
-    RmcCoordinates adjustedCoords = {
-        .x = (coords->x + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-        .y = (coords->y + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-        .z = (coords->z + manifold->fBounds - dXi2) / manifold->fBounds / 2 * manifold->uResolution,
-    };  
-    uint32_t i = adjustedCoords.x;
-    i += adjustedCoords.y * manifold->uResolution;
-    i += adjustedCoords.z * manifold->uResolution * manifold->uResolution;
+    const RmcFloat r = (manifold->uMetricResolution - 1) / 2.0 / manifold->fBounds;
+    DEBUGPRINT("Getting inverse metric\n");
+    uint64_t 
+        ix = r * (coords->x + manifold->fBounds),
+        iy = r * (coords->y + manifold->fBounds),
+        iz = r * (coords->z + manifold->fBounds);
 
-    for(uint32_t j = 0; j < 3; ++j) {
-        for(uint32_t k = 0; k < 3; ++k) {
+    uint64_t i = 
+        +ix
+        +iy * manifold->uMetricResolution
+        +iz * manifold->uMetricResolution * manifold->uMetricResolution
+    ;
+
+    DEBUGPRINT("\tGetting inverse metric at { %lu, %lu, %lu }, index %lu out of %lu\n",
+    ix, iy, iz,
+    (long unsigned)i, (long unsigned)manifold->uMetricSize - 1);
+    for(uint64_t j = 0; j < 3; ++j) {
+        for(uint64_t k = 0; k < 3; ++k) {
             (*output)[j][k] = manifold->inverseMetricField[i][j][k];
         }
     }
 }
 
 //calculate values for metric in buffer
-static RmcError _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
+static void _fillMetric(RmcManifold manifold, RmcMetricGenerator func) {
     //width of cube 
-    const RmcFloat dXi = (manifold->fBounds * 2) / manifold->uResolution;
+    const RmcFloat r = 2 * (manifold->uMetricResolution - 1) * manifold->fBounds;
 
-    for(uint32_t i = 0; i < manifold->uSize; ++i) {
+    for(uint64_t i = 0; i < manifold->uMetricSize; ++i) {
         RmcCoordinates coords = {
-            .x = (i % manifold->uResolution),
-            .y = (i % (manifold->uResolution * manifold->uResolution)) / manifold->uResolution,
-            .z = (i / (manifold->uResolution * manifold->uResolution))
+            .x = (i % manifold->uMetricResolution),
+            .y = (i / manifold->uMetricResolution % manifold->uMetricResolution),
+            .z = (i / manifold->uMetricResolution / manifold->uMetricResolution)
         };
         //get coords
-        coords.x *= dXi;
-        coords.y *= dXi;
-        coords.z *= dXi;
+        coords.x *= r;
+        coords.y *= r;
+        coords.z *= r;
         //center coords
-        const RmcFloat offset = dXi * 0.5 * (manifold->uResolution + 1);
-        coords.x -= offset;
-        coords.y -= offset;
-        coords.z -= offset;
+        coords.x -= manifold->fBounds;
+        coords.y -= manifold->fBounds;
+        coords.z -= manifold->fBounds;
 
         //fill metric in spot
         func(&coords, &manifold->metricField[i]);
         _invertMetric(&manifold->metricField[i], &manifold->inverseMetricField[i]);
     }
-    return RMC_SUCCESS;
+}
+
+//for levi-civita
+static void _fillChristoffel(RmcManifold manifold) {
+    const RmcFloat r = manifold->fBounds * (1.0 + 1.0 / manifold->uMetricResolution);
+
+    for(uint64_t i = 0; i < manifold->uChristoffelSize; ++i) {
+        const uint64_t 
+            ix = i % manifold->uChristoffelResolution,
+            iy = i / manifold->uChristoffelResolution % manifold->uChristoffelResolution,
+            iz = i / manifold->uChristoffelResolution / manifold->uChristoffelResolution;
+        if(
+            !ix || !iy || !iz ||
+            ix == manifold->uMetricResolution ||
+            iy == manifold->uMetricResolution || 
+            iz == manifold->uMetricResolution
+        ) {
+            //I love nested fors i love nested fors i love nested fors
+            for(uint32_t j = 0; j < 3; ++j) {
+                for(uint32_t k = 0; k < 3; ++k) {
+                    for(uint32_t l = 0; l < 3; ++l) {
+                        manifold->christoffelField[i][j][k][l] = 0.0;
+                    }
+                }
+            }
+        } else {
+
+        }
+    }
 }
 
 RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifold* result){
@@ -131,8 +176,12 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
         return RMC_ERROR_GENERIC_NULLPTR;
     }
 
-    if(!manifoldInfo->uResolution) {
+    if(!manifoldInfo->uMetricResolution || manifoldInfo->fBounds == 0.0) {
         return RMC_ERROR_GENERIC_ZERO_SIZE;
+    }
+
+    if(manifoldInfo->fBounds < 0) {
+        return RMC_ERROR_GENERIC_NEGATIVE_SIZE;
     }
 #define ALIAS (*result)
 
@@ -141,18 +190,29 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
     *result = malloc(sizeof(**result));
 
     ALIAS->fBounds = manifoldInfo->fBounds;
-    ALIAS->uResolution = manifoldInfo->uResolution;
+    ALIAS->uMetricResolution = manifoldInfo->uMetricResolution;
+    ALIAS->uChristoffelResolution = ALIAS->uMetricResolution + 1;
 
-    ALIAS->uSize = 
-        ALIAS->uResolution *
-        ALIAS->uResolution *
-        ALIAS->uResolution;
+    ALIAS->uMetricSize = 
+        ALIAS->uMetricResolution *
+        ALIAS->uMetricResolution *
+        ALIAS->uMetricResolution;
+
+    //(uMetricResolution + 1) ^ 3
+    //i know this is horrible but i don't care
+    ALIAS->uChristoffelSize = 
+        ALIAS->uChristoffelResolution *
+        ALIAS->uChristoffelResolution *
+        ALIAS->uChristoffelResolution;
+
+    DEBUGPRINT("\tLength of metric buffer: %lu\n",
+    (long unsigned)ALIAS->uMetricSize);
 
     //create buffers
 
     DEBUGPRINT("\tAllocating metric field for manifold...\n");
     ALIAS->metricField = malloc(
-        ALIAS->uSize *
+        ALIAS->uMetricSize *
         sizeof(RmcMetricOutput)
     );
 
@@ -165,7 +225,7 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
 
     DEBUGPRINT("\tAllocating inverse metric field for manifold...\n");
     ALIAS->inverseMetricField = malloc(
-        ALIAS->uSize *
+        ALIAS->uMetricSize *
         sizeof(RmcMetricOutput)
     );
 
@@ -179,7 +239,7 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
 
     DEBUGPRINT("\tAllocating christoffel field for manifold...\n");
     ALIAS->christoffelField = malloc(
-        ALIAS->uSize *
+        ALIAS->uChristoffelSize *
         sizeof(RmcChristoffelSymbol)
     );
 
@@ -193,12 +253,8 @@ RmcError rmcManifoldCreate(const RmcManifoldCreateInfo* manifoldInfo, RmcManifol
     DEBUGPRINT("\tOK\n\n\t");
 
     DEBUGPRINT("Filling metric using the generator...\n\t");
-    RmcError temp = _fillMetric(ALIAS, manifoldInfo->fpMetricGenerator);
+    _fillMetric(ALIAS, manifoldInfo->fpMetricGenerator);
 
-    if(temp) {
-        DEBUGPRINT("Failed to fill manifold using generator");
-        return temp;
-    }
     DEBUGPRINT("OK\n\nSuccessfully created manifold\n\n");
 
 #undef ALIAS
@@ -229,9 +285,9 @@ RmcError rmcManifoldTensorLowerIndex(RmcManifold manifold, const RmcCoordinates*
     _getMetricAt(manifold, coords, &metric);
     result->type = RMC_TENSOR_TYPE_COVECTOR;
 
-    for(uint32_t i = 0; i < 3; ++i) {
+    for(uint64_t i = 0; i < 3; ++i) {
         result->components.u[i] = 0;
-        for(uint32_t j = 0; j < 3; ++j) {
+        for(uint64_t j = 0; j < 3; ++j) {
             result->components.u[i] += metric[i][j] * vector->components.u[j];
         }
     }
@@ -254,9 +310,9 @@ RmcError rmcManifoldTensorRaiseIndex(RmcManifold manifold, const RmcCoordinates*
     _getInverseMetricAt(manifold, coords, &metric);
     result->type = RMC_TENSOR_TYPE_VECTOR;
 
-    for(uint32_t i = 0; i < 3; ++i) {
+    for(uint64_t i = 0; i < 3; ++i) {
         result->components.u[i] = 0;
-        for(uint32_t j = 0; j < 3; ++j) {
+        for(uint64_t j = 0; j < 3; ++j) {
             result->components.u[i] += metric[i][j] * vector->components.u[j];
         }
     }
@@ -278,8 +334,8 @@ RmcError rmcManifoldTensorGetLength(RmcManifold manifold, const RmcCoordinates* 
     RmcMetricOutput metric;
     _getMetricAt(manifold, coords, &metric);
     RmcFloat length = 0;
-    for(uint32_t i = 0; i < 3; ++i) {
-        for(uint32_t j = 0; j < 3; ++j) {
+    for(uint64_t i = 0; i < 3; ++i) {
+        for(uint64_t j = 0; j < 3; ++j) {
             length += metric[i][j] * vector->components.u[i] * vector->components.u[j];
         }
     }
