@@ -12,10 +12,13 @@
 #endif
 
 #ifdef RMC_USE_FLOAT 
-#define RmcFloat float
+typedef float RmcFloat;
 #else
-#define RmcFloat double
+typedef double RmcFloat;
 #endif
+
+typedef uint32_t RmcBool;
+
 
 #define RMC_DEFINE_HANDLE(handlename) typedef struct handlename##_s *handlename;
 
@@ -51,6 +54,8 @@ typedef enum {
 } RmcError;
 
 RMC_DEFINE_HANDLE(RmcManifold)
+//contains info about the volumes in the scene
+RMC_DEFINE_HANDLE(RmcScene)
 
 #undef RMC_DEFINE_HANDLE
 

@@ -2,6 +2,7 @@
 #include "geo.h"
 #include "manifold.h"
 #include "rmc.h"
+#include "scene.h"
 
 //kroenecker delta
 void metrFill(const RmcCoordinates* coords, RmcMetricOutput* output) {
@@ -12,9 +13,19 @@ void metrFill(const RmcCoordinates* coords, RmcMetricOutput* output) {
     }
 }
 
+void sphere(void *pData, const RmcCoordinates* coords, RmcBool* hit) {
+    *hit = 0;
+    if(coords->x * coords->x +
+    coords->y * coords->y +
+    coords->z * coords->z < 1.0) {
+        *hit = 1;
+    }
+}
+
 int main(int argC, char* argV[]) {
 
     RmcManifold manifold;
+    RmcScene scene;
 
     {
         RmcManifoldCreateInfo info = {
@@ -24,6 +35,20 @@ int main(int argC, char* argV[]) {
         };
         rmcManifoldCreate(&info, &manifold);
     }
+
+    {
+        RmcVolumeInfo volume = {
+            .pData = NULL,
+            .pfVolume = sphere,
+        };
+        RmcSceneCreateInfo info = {
+            .uVolumeCount = 1,
+            .pVolumes = &volume
+        };
+        rmcSceneCreate(&info, &scene);
+    }
+
+
     RmcTensor b;
     RmcTensor a = {
         RMC_TENSOR_TYPE_COVECTOR,
@@ -49,6 +74,7 @@ int main(int argC, char* argV[]) {
     printf("Length of vector is %f\n", result);
 
     rmcManifoldDestroy(manifold);
+    rmcSceneDestroy(scene);
 
     return 0;
 }
